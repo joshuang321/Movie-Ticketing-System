@@ -154,7 +154,8 @@ namespace Movie_Ticketing_System
             }
             Cinema chosencinema = CinemaData[index];
             bool isAvailable = true;
-            ScreeningData.ForEach(delegate (Screening screening) {
+            ScreeningData.ForEach(delegate (Screening screening)
+            {
                 if (chosencinema == screening.cinema &&
                 (screeningdateTime < screening.screeningDateTime.AddMinutes(screening.movie.duration + 15)
                 && screeningdateTime > screening.screeningDateTime) ||
@@ -335,11 +336,6 @@ namespace Movie_Ticketing_System
             ordersearch.ticketList[0].screening.seatsRemaining += ordersearch.ticketList.Count;
             ordersearch.status = "Cancelled";
             Console.WriteLine("Amount refunded: {0:C2}\r\nCancellation Successful!", ordersearch.amount);
-        }
-
-        static void Hell()
-        {
-            Console.WriteLine("Hello World!");
         }
     }
 }
