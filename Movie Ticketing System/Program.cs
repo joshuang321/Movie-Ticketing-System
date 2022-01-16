@@ -126,7 +126,7 @@ namespace Movie_Ticketing_System
             MovieData.ForEach(Print);
             Console.Write("\r\nSelect a movie: ");
             string title = Console.ReadLine();
-            Movie movie = MovieData.Find(x=> title == x.title);
+            Movie movie = MovieData.Find(x => title == x.title);
             if (null == movie)
             {
                 Console.WriteLine("Failed to find to find Movie with title: " + title);
@@ -148,14 +148,14 @@ namespace Movie_Ticketing_System
             CinemaData.ForEach(Print);
             Console.Write("\r\nSelect Cinema Hall: ");
             int index = int.Parse(Console.ReadLine());
-            if (index > (CinemaData.Count -1) || index < 0)
+            if (index > (CinemaData.Count - 1) || index < 0)
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
             Cinema chosencinema = CinemaData[index];
             bool isAvailable = true;
             ScreeningData.ForEach(delegate (Screening screening) {
-                if (chosencinema == screening.cinema && 
+                if (chosencinema == screening.cinema &&
                 (screeningdateTime < screening.screeningDateTime.AddMinutes(screening.movie.duration + 15)
                 && screeningdateTime > screening.screeningDateTime) ||
                 (screeningdateTime.AddMinutes(movie.duration + 15) < screening.screeningDateTime.AddMinutes(screening.movie.duration + 15)
@@ -177,12 +177,12 @@ namespace Movie_Ticketing_System
         {
             ScreeningData.ForEach(Print);
             Console.Write("\r\nSelection Session: ");
-            if (int.TryParse(Console.ReadLine(), out int index) || index < 1 
+            if (int.TryParse(Console.ReadLine(), out int index) || index < 1
                 || index > ScreeningData.Count)
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            ScreeningData.RemoveAt(index -1);
+            ScreeningData.RemoveAt(index - 1);
             Console.WriteLine("Movie Screening removal successful!");
         }
         static void OrderMovieTicket()
@@ -291,7 +291,7 @@ namespace Movie_Ticketing_System
                         {
                             Console.WriteLine("Invalid Input!"); break;
                         }
-                        genericTicket = new Adult(chosenscreening, ('y'==yn[0] || 'Y'==yn[0]) ? true : false);
+                        genericTicket = new Adult(chosenscreening, ('y' == yn[0] || 'Y' == yn[0]) ? true : false);
                         if ("2D" == chosenscreening.screeningType)
                         {
                             if ((int)chosenscreening.screeningDateTime.DayOfWeek < 5)
@@ -335,6 +335,11 @@ namespace Movie_Ticketing_System
             ordersearch.ticketList[0].screening.seatsRemaining += ordersearch.ticketList.Count;
             ordersearch.status = "Cancelled";
             Console.WriteLine("Amount refunded: {0:C2}\r\nCancellation Successful!", ordersearch.amount);
+        }
+
+        static void Hell()
+        {
+            Console.WriteLine("Hello World!");
         }
     }
 }
