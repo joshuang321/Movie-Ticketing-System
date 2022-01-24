@@ -1,39 +1,265 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Net;
+using System.IO.Compression;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Threading.Tasks;
+using System.Net.Http;
 
 namespace Movie_Ticketing_System
 {
     class Program
     {
-        // If C# forces me to use unmanaged code, it won't be a problem!
-        [DllImport("kernel32.dll")]
-        public static extern IntPtr GetStdHandle(int nStdHandle);
-        [DllImport("kernel32.dll")]
-        public static extern int GetConsoleMode(IntPtr hConsoleMode, IntPtr dwMode);
-        [DllImport("kernel32.dll")]
-        public static extern int SetConsoleMode(IntPtr hConsoleHandle, int dwMode);
-
-        const int STD_INPUT_HANDLE = -10;
-        const int STD_OUTPUT_HANDLE = -11;
-        static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
-
-        static int gOrderNo = 1;
-        static int gScreeningNo = 1001;
-
-        static public List<Movie> MovieData;
-        static public List<Cinema> CinemaData;
-        static public List<Screening> ScreeningData;
-        static public List<Order> OrderData;
-
         static void Main(string[] args)
         {
             InitializeApp();
-            DeleteMovieScreeningSession();
-            ScreeningData.ForEach(Print);
+            /*
+            while (true) 
+            {
+                Console.WriteLine("Movie Database System\r\n" +
+                                  "---------------------\r\n" +
+                                  "1. Offline Movie Database\r\n" +
+                                  "2. Online Movie Database via The Movie Database (TMDB)\r\n");
+                if (!int.TryParse(Console.ReadLine(), out int options) || options < 1 || options > 2)
+                {
+                    Console.WriteLine("Invalid Option!"); continue;
+                }
+                if (1 == options) OfflineDatabaseInterface();
+                else OnlineDatabaseInterface();
+            }
+            */
         }
+
         static void Print(Object obj) { Console.WriteLine(obj); }
+        static void OfflineDatabaseInterface()
+        {
+            Console.Write("Offline Database System\r\n" +
+                          "-----------------------\r\n" +
+                          "1. List all movie Screenings\r\n" +
+                          "2. Add a movie Screening\r\n" +
+                          "3. Remove a movie Screening\r\n" +
+                          "4. Order a movie Ticket\r\n" +
+                          "5. Cancel a movie Ticket\r\n");
+            if (!int.TryParse(Console.ReadLine(), out int options) || options < 1 || options > 5)
+            {
+                Console.WriteLine("Invalid Option!"); return;
+            }
+            switch (options)
+            {
+                case 1: ListMovieScreenings(); break;
+                case 2: AddMovieScreeningSession(); break;
+                case 3: DeleteMovieScreeningSession(); break;
+                case 4: OrderMovieTicket(); break;
+                case 5: CancelTicketOrder(); break;
+            }
+        }
+        static void OnlineDatabaseInterface()
+        {
+            Console.WriteLine("Online Movie Database through TMDB\r\n" +
+                              "----------------------------------\r\n" +
+                              "1. Create a new Login Session\r\n" +
+                              "2. Create a new Guest Session\r\n");
+            if (!int.TryParse(Console.ReadLine(), out int options) || options < 1 || options > 2)
+            {
+                    Console.WriteLine("Invalid option!"); return;
+            }
+            OnlineDatabase.MovieDatabaseSession currentSession;
+            if (1 == options) currentSession = CreateLoginSession();
+            else currentSession = CreateGuestSession();
+
+            Console.Write("Enter movie title to query: ");
+            string movietitle = Console.ReadLine();
+            if (-1 == GetMovieIdsFromMovieDatabaseAPI())
+            {
+                Console.WriteLine($"Failed to find title: {movietitle}");
+                return;
+            }
+            if (currentSession is OnlineDatabase.MovieDatabaseSession)
+            {
+                Console.WriteLine("What do you want to do?\r\n" +
+                              "1.  Get Movie Details\r\n" +
+                              "2.  Get Alternative Movie Titles\r\n" +
+                              "3.  Get Movie Images\r\n" +
+                              "4.  Get Movie Recommendations\r\n" +
+                              "5.  Get Similar Movies\r\n" +
+                              "6.  Get Movie Release Dates\r\n" +
+                              "7.  Get Movie Videos\r\n" +
+                              "8.  Get Latest Movies\r\n" +
+                              "9.  Get Popular Movies\r\n" +
+                              "10. Get Top Rated Movies\r\n");
+
+                if (!int.TryParse(Console.ReadLine(), out options) || options < 1 || options > 10)
+                {
+                    Console.WriteLine("Invalid Input!"); currentSession.ExitSession();
+                    return;
+                }
+                switch (options)
+                {
+                    case 1: GetMovieDetails(); break;
+                    case 2: GetAlternativeMovieTitles(); break;
+                    case 3: GetMovieImages(); break;
+                    case 4: GetMovieRecommendations(); break;
+                    case 5: GetSimilarMovies(); break;
+                    case 6: GetMovieReleaseDates(); break;
+                    case 7: GetMovieVideos(); break;
+                    case 8: GetLatestMovies(); break;
+                    case 9: GetPopularMovies(); break;
+                    case 10: GetTopRatedMovies(); break;
+                }
+
+            }
+            else
+            {
+                Console.WriteLine("What do you want to do?\r\n" +
+                                  "-----------------------\r\n"
+                                  "1. Get Rated Movies\r\n");
+                if (!int.TryParse(Console.ReadLine(), out options) || options != 1)
+                {
+                    Console.WriteLine("Invalid Input!"); currentSession.ExitSession();
+                    return;
+                }
+            }
+            GuestGetRatedMovies();
+            currentSession.ExitSession();
+        }
+
+        static OnlineDatabase.MovieDatabaseSession CreateLoginSession()
+        {
+            OnlineDatabase.MovieDatabaseRequestToken request_token = 
+                new OnlineDatabase.MovieDatabaseRequestToken();
+            Console.WriteLine("Enter username: ");
+            string username = Console.ReadLine();
+            Console.WriteLine("Enter password: ");
+            string password = Console.ReadLine();
+            using (HttpClient httpClient = new HttpClient())
+            {
+                httpClient.BaseAddress = new Uri(OnlineDatabase.onlinemoviedb_baselink);
+                Task<HttpResponseMessage> getresponseTask = httpClient.GetAsync(@"/authentication/token/new?api_key=" +
+                        OnlineDatabase.api_key_session);
+                getresponseTask.Wait();
+                HttpResponseMessage responseMessage = getresponseTask.Result;
+                if (!responseMessage.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("Error occured, please try again,"); return null;
+                }
+                Task<string> readStringTask = responseMessage.Content.ReadAsStringAsync();
+                readStringTask.Wait();
+                JObject jObject = JObject.Parse(readStringTask.Result);
+                if (!(bool)jObject.SelectToken("success"))
+                {
+                    OnlineDatabase.MovieDatabaseError movieDatabaseError = JsonConvert.DeserializeObject
+                        <OnlineDatabase.MovieDatabaseError>(readStringTask.Result);
+                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
+                        $"{movieDatabaseError.status_message}");
+                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
+                    return null;
+                }
+                request_token.expires_at = (string)jObject.SelectToken("expires_at");
+                request_token.request_token = (string)jObject.SelectToken("request_token");
+
+                FormUrlEncodedContent content = new FormUrlEncodedContent(new[]
+                {
+                    new KeyValuePair<string,string>("username", username),
+                    new KeyValuePair<string, string>("password", password),
+                    new KeyValuePair<string, string>("request_token", request_token.request_token)
+                });
+                getresponseTask = httpClient.PostAsync(@"/authentication/token/validate_with_login?api_key=" + OnlineDatabase.api_key_session,
+                    content);
+                getresponseTask.Wait();
+                responseMessage = getresponseTask.Result;
+                if (!responseMessage.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("Error occured, please try again."); return null;
+                }
+                readStringTask = responseMessage.Content.ReadAsStringAsync();
+                readStringTask.Wait();
+                jObject = JObject.Parse(readStringTask.Result);
+                if(!(bool)jObject.SelectToken("success"))
+                {
+                    OnlineDatabase.MovieDatabaseError movieDatabaseError = JsonConvert.DeserializeObject
+                        <OnlineDatabase.MovieDatabaseError>(readStringTask.Result);
+                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
+                        $"{movieDatabaseError.status_message}");
+                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
+                    return null;
+                }
+                return new OnlineDatabase.MovieDatabaseSession((string)jObject.SelectToken("session_id"));
+            }
+        }
+        static OnlineDatabase.MovieDatabaseSession CreateGuestSession()
+        {
+            using (HttpClient httpClient = new HttpClient())
+            {
+                httpClient.BaseAddress = new Uri(OnlineDatabase.api_key_session);
+                Task<HttpResponseMessage> getguestsessionTask = httpClient.GetAsync($"/authentication/guest_session/new?api_key=" +
+                    OnlineDatabase.api_key_session);
+                getguestsessionTask.Wait();
+                HttpResponseMessage httpResponse = getguestsessionTask.Result;
+                if (!httpResponse.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("Error occured. Please try again.");
+                }
+                Task<string> readStringTask = httpResponse.Content.ReadAsStringAsync();
+                readStringTask.Wait();
+                JObject jObject = JObject.Parse(readStringTask.Result);
+                if (!(bool)jObject.SelectToken("success"))
+                {
+                    OnlineDatabase.MovieDatabaseError movieDatabaseError = JsonConvert.DeserializeObject
+                        <OnlineDatabase.MovieDatabaseError>(readStringTask.Result);
+                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
+                        $"{movieDatabaseError.status_message}");
+                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
+                    return null;
+                }
+                return new OnlineDatabase.MovieDatabaseGuestSession((string)jObject.SelectToken("session_id"), (string)jObject.SelectToken("expires_at"));
+            }
+        }
+        static void GetMovieDetails()
+        {
+
+        }
+        static void GetAlternativeMovieTitles()
+        {
+            
+        }
+        static void GetMovieImages()
+        {
+
+        }
+        static void GetMovieRecommendations()
+        {
+
+        }
+        static void GetSimilarMovies()
+        {
+
+        }
+        static void GetMovieReleaseDates()
+        {
+
+        }
+        static void GetMovieVideos()
+        {
+
+        }
+        static void GetLatestMovies()
+        {
+
+        }
+        static void GetPopularMovies()
+        {
+
+        }
+        static void GetTopRatedMovies()
+        {
+
+        }
+        static void GuestGetRatedMovies()
+        {
+
+        }
         static void LoadMovieData()
         {
             string[] strarray; string strline;
@@ -42,14 +268,14 @@ namespace Movie_Ticketing_System
             using (StreamReader sr = new StreamReader("Movie.csv"))
             {
                 sr.ReadLine();
-                while ((strline = sr.ReadLine()) != null)
+                while (null != (strline = sr.ReadLine()))
                 {
                     strarray = strline.Split(',');
                     if (DateTime.TryParse(strarray[4], out dateTimeNotNull))
                         dateTime = dateTimeNotNull;
                     else dateTime = null;
 
-                    MovieData.Add(new Movie(strarray[0], int.Parse(strarray[1]),
+                    OfflineDatabase.MovieData.Add(new Movie(strarray[0], int.Parse(strarray[1]),
                         strarray[3], dateTime, GenreListFromString(strarray[2])));
                 }
             }
@@ -70,7 +296,7 @@ namespace Movie_Ticketing_System
                 while ((strline = sr.ReadLine()) != null)
                 {
                     strarray = strline.Split(',');
-                    CinemaData.Add(new Cinema(strarray[0], int.Parse(strarray[1]),
+                    OfflineDatabase.CinemaData.Add(new Cinema(strarray[0], int.Parse(strarray[1]),
                         int.Parse(strarray[2])));
                 }
             }
@@ -82,79 +308,88 @@ namespace Movie_Ticketing_System
             using (StreamReader sr = new StreamReader("Screening.csv"))
             {
                 sr.ReadLine();
-                while ((strline = sr.ReadLine()) != null)
+                while (null != (strline = sr.ReadLine()))
                 {
                     strarray = strline.Split(',');
-                    screening = new Screening(gScreeningNo++, DateTime.Parse(strarray[0]),
-                        strarray[1], CinemaData.Find(x => strarray[2] == x.name &&
+                    screening = new Screening(OfflineDatabase.gScreeningNo++, DateTime.Parse(strarray[0]),
+                        strarray[1], OfflineDatabase.CinemaData.Find(x => strarray[2] == x.name &&
                         int.Parse(strarray[3]) == x.hallNo),
-                        MovieData.Find(x => strarray[4] == x.title));
+                        OfflineDatabase.MovieData.Find(x => strarray[4] == x.title));
                     screening.seatsRemaining = screening.cinema.capacity;
-                    ScreeningData.Add(screening);
+                    OfflineDatabase.ScreeningData.Add(screening);
                 }
             }
         }
         static void InitializeApp()
         {
-            MovieData = new(); CinemaData = new(); ScreeningData = new(); OrderData = new();
+            OfflineDatabase.MovieData = new(); OfflineDatabase.CinemaData = new(); OfflineDatabase.ScreeningData = new(); 
+            OfflineDatabase.OrderData = new();
             LoadMovieData(); LoadCinemaData(); LoadScreeningData();
-            MovieData.ForEach(delegate (Movie movie)
+            OfflineDatabase.MovieData.ForEach(delegate (Movie movie)
             {
-                movie.screeningList = ScreeningData.FindAll(x => movie == x.movie);
+                movie.screeningList = OfflineDatabase.ScreeningData.FindAll(x => movie == x.movie);
             });
         }
         static void ListMovieScreenings()
         {
-            Console.WriteLine("{0,-26}Duration\tClassification\tOpeningDate\t\tGenres", "Title");
-            MovieData.ForEach(Print);
+            Console.WriteLine("\x1b[1m\x1b[104mTitle\t\t\tDuration\tClassification\tOpeningDate\t\tGenres\x1b[0m");
+            OfflineDatabase.MovieData.ForEach(Print);
             Console.Write("\r\nSelect a movie to watch: ");
             string title = Console.ReadLine();
-            Movie moviesearch = MovieData.Find(x => title == x.title);
+            Movie moviesearch = OfflineDatabase.MovieData.Find(x => title == x.title);
             if (null == moviesearch)
             {
-                Console.WriteLine("Failed to find Movie with title: " + title);
+                Console.WriteLine("\x1b[1m\x1b[31mFailed to find a movie with title: " + title + "\x1b[0m");
                 return;
             }
-            Console.WriteLine("\r\nScreening Number\tScreening Date Time\tScreeningType\t" +
-                "Seats Remaining\tCinema\t\tHall Number\tCapacity\tTitle");
-            List<Screening> allmovieScreenings = ScreeningData.FindAll(
+            Console.WriteLine("\r\n\x1b[1m\x1b[104mScreening Number\tScreening Date Time\tScreeningType\t" +
+                "Seats Remaining\tCinema\t\tHall Number\tCapacity\tTitle\x1b[0m");
+            List<Screening> allmovieScreenings = OfflineDatabase.ScreeningData.FindAll(
                 x => moviesearch == x.movie);
             allmovieScreenings.ForEach(Print);
         }
         static void AddMovieScreeningSession()
         {
-            MovieData.ForEach(Print);
+            Console.WriteLine("\x1b[1m\x1b[104mTitle\t\t\tDuration\tClassification\tOpeningDate\t\tGenres\x1b[0m");
+            OfflineDatabase.MovieData.ForEach(Print);
             Console.Write("\r\nSelect a movie: ");
             string title = Console.ReadLine();
-            Movie movie = MovieData.Find(x => title == x.title);
+            Movie movie = OfflineDatabase.MovieData.Find(x => title == x.title);
             if (null == movie)
             {
-                Console.WriteLine("Failed to find to find Movie with title: " + title);
+                Console.WriteLine("\x1b[1m\x1b[31mFailed to find to find Movie with title: " + title + "\x1b[0m");
                 return;
             }
             Console.Write("Select a screening type: ");
             string screentype = Console.ReadLine();
             if ("2D" != screentype && "3D" != screentype)
             {
-                Console.WriteLine("Invalid screening type!");
+                Console.WriteLine("\x1b[1m\x1b[31mInvalid screening type!\x1b[0m"); return;
             }
             Console.Write("Enter screening date time: ");
             if (!DateTime.TryParse(Console.ReadLine(), out DateTime screeningdateTime))
             {
-                Console.WriteLine("Failed to provide a valid DateTime Format!");
+                Console.WriteLine("\x1b[1m\x1b[31mFailed to provide a valid DateTime Format!\x1b[0m");
                 return;
             }
             Console.Write("\r\n");
-            CinemaData.ForEach(Print);
-            Console.Write("\r\nSelect Cinema Hall: ");
-            int index = int.Parse(Console.ReadLine());
-            if (index > (CinemaData.Count - 1) || index < 0)
+            Console.WriteLine("\x1b[1m\x1b[104mNo.\tName\t\tHall No.\tCapacity\x1b[0m");
+            int i = 0;
+            OfflineDatabase.CinemaData.ForEach(delegate (Cinema cinema)
             {
-                Console.WriteLine("Invalid Input!"); return;
+                Console.Write(++i + ".\t");
+                Print(cinema);
+            });
+
+            Console.Write("\r\nSelect Cinema Hall No.: ");
+            if (!int.TryParse(Console.ReadLine(), out int index) ||
+                index > OfflineDatabase.CinemaData.Count || index < 1)
+            {
+                Console.WriteLine("\x1b[0m\x1b[31mInvalid Input!\x1b[0m"); return;
             }
-            Cinema chosencinema = CinemaData[index];
+            Cinema chosencinema = OfflineDatabase.CinemaData[index-1];
             bool isAvailable = true;
-            ScreeningData.ForEach(delegate (Screening screening)
+            OfflineDatabase.ScreeningData.ForEach(delegate (Screening screening)
             {
                 if (chosencinema == screening.cinema &&
                 (screeningdateTime < screening.screeningDateTime.AddMinutes(screening.movie.duration + 15)
@@ -167,44 +402,50 @@ namespace Movie_Ticketing_System
             });
             if (!isAvailable)
             {
-                Console.WriteLine("Cinema hall is currently screening at that time!");
+                Console.WriteLine("\x1b[1m\x1b[31mCinema hall is currently screening at that time!\x1b[0m");
                 return;
             }
-            ScreeningData.Add(new Screening(gScreeningNo++, screeningdateTime, screentype,
+            OfflineDatabase.ScreeningData.Add(new Screening(OfflineDatabase.gScreeningNo++, screeningdateTime, screentype,
                 chosencinema, movie));
-            Console.WriteLine("Movie Screening creation successful!");
+            Console.WriteLine("\x1b[1m\x1b[32mMovie Screening creation successful!\x1b[0m");
         }
         static void DeleteMovieScreeningSession()
         {
-            ScreeningData.ForEach(Print);
-            Console.Write("\r\nSelection Session: ");
-            if (int.TryParse(Console.ReadLine(), out int index) || index < 1
-                || index > ScreeningData.Count)
+            OfflineDatabase.ScreeningData.ForEach(Print);
+            Console.Write("\r\nSelect Session to cancel: ");
+            if (!int.TryParse(Console.ReadLine(), out int index) || index < 1001
+                || index > OfflineDatabase.gScreeningNo)
             {
-                Console.WriteLine("Invalid Input!"); return;
+                Console.WriteLine("\x1b[1m\x1b[31mInvalid Input!\x1b[0m"); return;
             }
-            ScreeningData.RemoveAt(index - 1);
+            int screeningindex = OfflineDatabase.ScreeningData.FindIndex(x => index == x.screeningNo);
+            if (-1 == screeningindex)
+            {
+                Console.WriteLine("\x1b[1m\x1b[31mScreening doesn't exist!\x1b[0m"); return;
+            }
+            OfflineDatabase.ScreeningData.RemoveAt(screeningindex);
             Console.WriteLine("Movie Screening removal successful!");
         }
         static void OrderMovieTicket()
         {
             int index;
-            MovieData.ForEach(Print);
+            OfflineDatabase.MovieData.ForEach(Print);
             Console.Write("\r\nSelect a Movie: ");
             if (!int.TryParse(Console.ReadLine(), out index)
-                || index < 1 || index > MovieData.Count)
+                || index < 1 || index > OfflineDatabase.MovieData.Count)
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            List<Screening> filteredscreening = ScreeningData.FindAll(x => MovieData[index] == x.movie);
+            List<Screening> filteredscreening = OfflineDatabase.ScreeningData.FindAll(x => 
+                OfflineDatabase.MovieData[index -1] == x.movie);
             filteredscreening.ForEach(Print);
             Console.Write("\r\nSelect Movie Screening: ");
             if (!int.TryParse(Console.ReadLine(), out index)
-                || index < 1 || index > MovieData.Count)
+                || index < 1 || index > OfflineDatabase.MovieData.Count)
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            Screening chosenscreening = filteredscreening[index];
+            Screening chosenscreening = filteredscreening[index-1];
             Console.Write("Number of Tickets to order: ");
             if (!int.TryParse(Console.ReadLine(), out index) || index < 0)
             {
@@ -215,7 +456,7 @@ namespace Movie_Ticketing_System
                 Console.WriteLine("Not enough seats of the chosen session!");
                 return;
             }
-            Order newOrder = new Order(gOrderNo++, DateTime.Now);
+            Order newOrder = new Order(OfflineDatabase.gOrderNo++, DateTime.Now);
             newOrder.status = "Unpaid";
             string ticketType;
             Ticket genericTicket = null;
@@ -326,7 +567,7 @@ namespace Movie_Ticketing_System
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            Order ordersearch = OrderData.Find(x => ordernumber == x.orderNo);
+            Order ordersearch = OfflineDatabase.OrderData.Find(x => ordernumber == x.orderNo);
             if (null == ordersearch)
             {
                 Console.WriteLine("Failed to find Order of Order No." + ordernumber +
@@ -337,5 +578,48 @@ namespace Movie_Ticketing_System
             ordersearch.status = "Cancelled";
             Console.WriteLine("Amount refunded: {0:C2}\r\nCancellation Successful!", ordersearch.amount);
         }
+
+        static int GetMovieIdsFromMovieDatabaseAPI()
+        {
+            string datafilename = "movie_ids_" + DateTime.Now.AddDays(-1).ToString("MM_dd_yyyy") + ".json";
+            string downloadlink = "http://files.tmdb.org/p/exports/" + datafilename + ".gz";
+
+            if (!File.Exists(datafilename))
+            {
+                using (WebClient wc = new WebClient())
+                {
+                    datafilename += ".gz";
+                    wc.DownloadFile(downloadlink, datafilename);
+                    using (FileStream ofs = new FileStream(datafilename, FileMode.Open))
+                    {
+                        datafilename = datafilename.Remove(datafilename.Length - 3);
+                        using (FileStream decompfs = File.Create(datafilename))
+                        {
+                            using (GZipStream decompStream = new GZipStream(ofs, CompressionMode.Decompress))
+                            {
+                                decompStream.CopyTo(decompfs);
+                            }
+                        }
+                    }
+                    File.Delete(datafilename + ".gz");
+                }
+            }
+            MovieDatabaseObject MovieDatabaseObj = null;
+            Console.WriteLine("Enter movie to search the database with: ");
+            using (StreamReader sr = new StreamReader(datafilename))
+            {
+                string movietitle = Console.ReadLine(), stringl;
+                while (null != (stringl = sr.ReadLine()))
+                {
+                    MovieDatabaseObj = JsonConvert.DeserializeObject<MovieDatabaseObject>(stringl);
+                    if (movietitle == MovieDatabaseObj.original_title) break;
+                    MovieDatabaseObj = null;
+                }
+            }
+
+            if (null != MovieDatabaseObj) return MovieDatabaseObj.id;
+            return -1;
+        }
+
     }
 }
