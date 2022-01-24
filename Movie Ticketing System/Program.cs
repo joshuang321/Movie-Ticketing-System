@@ -69,13 +69,6 @@ namespace Movie_Ticketing_System
             if (1 == options) currentSession = CreateLoginSession();
             else currentSession = CreateGuestSession();
 
-            Console.Write("Enter movie title to query: ");
-            string movietitle = Console.ReadLine();
-            if (-1 == GetMovieIdsFromMovieDatabaseAPI())
-            {
-                Console.WriteLine($"Failed to find title: {movietitle}");
-                return;
-            }
             if (currentSession is OnlineDatabase.MovieDatabaseSession)
             {
                 Console.WriteLine("What do you want to do?\r\n" +
@@ -86,11 +79,9 @@ namespace Movie_Ticketing_System
                               "5.  Get Similar Movies\r\n" +
                               "6.  Get Movie Release Dates\r\n" +
                               "7.  Get Movie Videos\r\n" +
-                              "8.  Get Latest Movies\r\n" +
-                              "9.  Get Popular Movies\r\n" +
-                              "10. Get Top Rated Movies\r\n");
+                              "8. Get Account Details\r\n");
 
-                if (!int.TryParse(Console.ReadLine(), out options) || options < 1 || options > 10)
+                if (!int.TryParse(Console.ReadLine(), out options) || options < 1 || options > 8)
                 {
                     Console.WriteLine("Invalid Input!"); currentSession.ExitSession();
                     return;
@@ -104,27 +95,51 @@ namespace Movie_Ticketing_System
                     case 5: GetSimilarMovies(); break;
                     case 6: GetMovieReleaseDates(); break;
                     case 7: GetMovieVideos(); break;
-                    case 8: GetLatestMovies(); break;
-                    case 9: GetPopularMovies(); break;
-                    case 10: GetTopRatedMovies(); break;
+                    case 8: GetAccountDetails(currentSession.session_id); break;
                 }
-
             }
             else
             {
                 Console.WriteLine("What do you want to do?\r\n" +
-                                  "-----------------------\r\n"
+                                  "-----------------------\r\n" +
                                   "1. Get Rated Movies\r\n");
                 if (!int.TryParse(Console.ReadLine(), out options) || options != 1)
                 {
                     Console.WriteLine("Invalid Input!"); currentSession.ExitSession();
                     return;
                 }
+                GuestGetRatedMovies(currentSession.session_id);
             }
-            GuestGetRatedMovies();
             currentSession.ExitSession();
         }
-
+        static string GetFromMovieDatabase(string requestUri)
+        {
+            using (HttpClient httpClient = new HttpClient())
+            {
+                httpClient.BaseAddress = new Uri(OnlineDatabase.onlinemoviedb_baselink);
+                Task<HttpResponseMessage> getresponseTask = httpClient.GetAsync(requestUri);
+                getresponseTask.Wait();
+                HttpResponseMessage httpResponse = getresponseTask.Result;
+                if (!httpResponse.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("Error occured, please try again.");
+                    return null;
+                }
+                Task<string> readStringTask = httpResponse.Content.ReadAsStringAsync();
+                readStringTask.Wait();
+                JObject jObject = JObject.Parse(readStringTask.Result);
+                if (jObject.ContainsKey("success"))
+                {
+                    OnlineDatabase.MovieDatabaseError movieDatabaseError = JsonConvert.DeserializeObject
+                        <OnlineDatabase.MovieDatabaseError>(readStringTask.Result);
+                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
+                        $"{movieDatabaseError.status_message}");
+                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
+                    return null;
+                }
+                return readStringTask.Result;
+            }
+        }
         static OnlineDatabase.MovieDatabaseSession CreateLoginSession()
         {
             OnlineDatabase.MovieDatabaseRequestToken request_token = 
@@ -216,49 +231,154 @@ namespace Movie_Ticketing_System
                 return new OnlineDatabase.MovieDatabaseGuestSession((string)jObject.SelectToken("session_id"), (string)jObject.SelectToken("expires_at"));
             }
         }
+        static int PromptForMovieTitle()
+        {
+            Console.Write("Enter movie to query: ");
+            string movietitle = Console.ReadLine();
+            int movieid = GetMovieIdsFromMovieDatabaseAPI(movietitle);
+            if (-1 == movieid)
+            {
+                Console.WriteLine($"Failed to find movie: {movietitle}");
+            }
+            return movieid;
+        }
+
         static void GetMovieDetails()
         {
+            int movieid = PromptForMovieTitle();
+            if (-1 == movieid) return;
+            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"?api_key=" + OnlineDatabase.api_key_session + @"&language=en-US");
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseMovieDetails movieDetails = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseMovieDetails>(result);
 
+                // do whatever here
+            }
         }
         static void GetAlternativeMovieTitles()
         {
-            
+            int movieid = PromptForMovieTitle();
+            if (-1 == movieid) return;
+            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/alternative_titles" + @"?api_key=" + OnlineDatabase.api_key_session);
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseAlternativeTitles movietitles = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseAlternativeTitles>(result);
+
+                // do whatever here
+            }
         }
         static void GetMovieImages()
         {
+            int movieid = PromptForMovieTitle();
+            if (-1 == movieid) return;
+            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/images" + @"?api_key=" + OnlineDatabase.api_key_session +
+                @"&language=en-US&include_image_language=null");
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseImages movieImages = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseImages>(result);
 
+                // do whatever here
+            }
         }
         static void GetMovieRecommendations()
         {
-
+            int movieid = PromptForMovieTitle();
+            if (-1 == movieid) return;
+            Console.WriteLine("Enter page number to look at (1-1000): ");
+            if (!int.TryParse(Console.ReadLine(), out int pagenumber) || pagenumber < 1 || pagenumber > 1000)
+            {
+                Console.WriteLine("Invalid Input!"); return;
+            }
+            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/recommendations" + @"?api_key=" + OnlineDatabase.api_key_session +
+                @"&language=en-US&page=" + pagenumber);
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseReccommendations movieReccomendations = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseReccommendations>(result);
+                
+                // do whatever here
+            }
         }
         static void GetSimilarMovies()
         {
-
+            int movieid = PromptForMovieTitle();
+            if (-1 == movieid) return;
+            Console.WriteLine("Enter page number to look at (1-1000): ");
+            if (!int.TryParse(Console.ReadLine(), out int pagenumber) || pagenumber < 1 || pagenumber > 1000)
+            {
+                Console.WriteLine("Invalid Input!"); return;
+            }
+            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/similar" + @"?api_key=" + OnlineDatabase.api_key_session +
+                @"&language=en-US&page=" + pagenumber);
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseSimilarMovies similarMovies = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseSimilarMovies>(result);
+                
+                // do whatever here
+            }
         }
         static void GetMovieReleaseDates()
         {
+            int movieid = PromptForMovieTitle();
+            if (-1 == movieid) return;
+            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"release_dates?api_key=" + OnlineDatabase.api_key_session);
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseReleaseDates movieReleaseDates = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseReleaseDates>(result);
 
+                // do whatever here
+            }
         }
         static void GetMovieVideos()
         {
+            int movieid = PromptForMovieTitle();
+            if (-1 == movieid) return;
+            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/videos?api_key=" +
+                OnlineDatabase.api_key_session + "&language=en-US");
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseVideos movieVideos = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseVideos>(result);
 
+                // do whatever here
+            }
         }
-        static void GetLatestMovies()
+        static void GetAccountDetails(string session_id)
         {
+            string result = GetFromMovieDatabase(@"/account?api_key=" + OnlineDatabase.api_key_session +
+                "&session_id=" + session_id);
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseAccountDetails accountDetails = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseAccountDetails>(result);
 
+                // do whatever here
+            }
         }
-        static void GetPopularMovies()
+        static void GuestGetRatedMovies(string session_id)
         {
+            string input;
+            Console.WriteLine("Do you want it to be sorted by ASC? [Y/N]: ");
+            if ((input = Console.ReadLine()).Length != 1  && "y" != input && "Y" != input
+                && "n" != input && "N" != input)
+            {
+                Console.WriteLine("Invalid Input!"); return;
+            }
+            string result = GetFromMovieDatabase(@"/guest_session/" + session_id + "/rated/movies?api_key=" +
+                OnlineDatabase.api_key_session + @"&language=en-US&sort_by=created_at." +
+                (("Y" == input || "y" == input) ? "asc" : "desc"));
+            if (null != result)
+            {
+                OnlineDatabase.MovieDatabaseGuestRatedMovies guestRatedMovies = JsonConvert.DeserializeObject<
+                    OnlineDatabase.MovieDatabaseGuestRatedMovies>(result);
 
-        }
-        static void GetTopRatedMovies()
-        {
-
-        }
-        static void GuestGetRatedMovies()
-        {
-
+                // do whatever here
+            }
         }
         static void LoadMovieData()
         {
@@ -579,7 +699,7 @@ namespace Movie_Ticketing_System
             Console.WriteLine("Amount refunded: {0:C2}\r\nCancellation Successful!", ordersearch.amount);
         }
 
-        static int GetMovieIdsFromMovieDatabaseAPI()
+        static int GetMovieIdsFromMovieDatabaseAPI(string movietitle)
         {
             string datafilename = "movie_ids_" + DateTime.Now.AddDays(-1).ToString("MM_dd_yyyy") + ".json";
             string downloadlink = "http://files.tmdb.org/p/exports/" + datafilename + ".gz";
@@ -605,10 +725,9 @@ namespace Movie_Ticketing_System
                 }
             }
             MovieDatabaseObject MovieDatabaseObj = null;
-            Console.WriteLine("Enter movie to search the database with: ");
             using (StreamReader sr = new StreamReader(datafilename))
             {
-                string movietitle = Console.ReadLine(), stringl;
+                string stringl;
                 while (null != (stringl = sr.ReadLine()))
                 {
                     MovieDatabaseObj = JsonConvert.DeserializeObject<MovieDatabaseObject>(stringl);
@@ -616,7 +735,6 @@ namespace Movie_Ticketing_System
                     MovieDatabaseObj = null;
                 }
             }
-
             if (null != MovieDatabaseObj) return MovieDatabaseObj.id;
             return -1;
         }
