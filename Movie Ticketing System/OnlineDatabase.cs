@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Net.Http;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Runtime.CompilerServices;
+
 
 namespace Movie_Ticketing_System
 {
@@ -17,6 +22,19 @@ namespace Movie_Ticketing_System
         {
             public string expires_at { get; set; }
             public string request_token { get; set; }
+
+            public MovieDatabaseRequestToken(string Expires_at, string Request_token)
+            {
+                expires_at = Expires_at; request_token = Request_token;
+            }
+        }
+        public struct MovieDatabaseDeleteRequestBody
+        {
+            public string session_id { get; set; }
+            public MovieDatabaseDeleteRequestBody(string Session_id)
+            {
+                session_id = Session_id;
+            }
         }
         public class MovieDatabaseSession
         {
@@ -27,7 +45,20 @@ namespace Movie_Ticketing_System
             }
             public void ExitSession()
             {
-                // TO DO: Send DELETE to delete the current Session.
+                using (HttpClient httpClient = new HttpClient())
+                {
+                    httpClient.BaseAddress = new Uri(onlinemoviedb_baselink);
+                    HttpRequestMessage httpDeleteRequest = new HttpRequestMessage(HttpMethod.Delete,
+                        @"/authentication/session?api_key=" + api_key_session);
+                    httpDeleteRequest.Content = new StringContent(JsonConvert.SerializeObject(new MovieDatabaseDeleteRequestBody(session_id)));
+                    Task<HttpResponseMessage> deleteSessionTask = httpClient.SendAsync(httpDeleteRequest);
+                    deleteSessionTask.Wait();
+                    HttpResponseMessage httpResponse = deleteSessionTask.Result;
+                    if (!httpResponse.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine("Error occured. Failed to exit session."); return;
+                    }
+                }
             }
         }
         public class MovieDatabaseGuestSession : MovieDatabaseSession
@@ -88,7 +119,6 @@ namespace Movie_Ticketing_System
             public float vote_average { get; set; }
             public int vote_count { get; set; }
         }
-
         public struct MovieDatabaseAlternativeTitles
         {
             public struct Title
@@ -239,6 +269,71 @@ namespace Movie_Ticketing_System
             public MovieDatabaseGuestRatedMovies.Result[] results { get; set; }
             public int total_pages { get; set; }
             public int total_results { get; set; }
+        }
+        public static JObject SendHttpClientMessage(HttpClient httpClient, string requestUrl, HttpMethod httpMethod,
+            JObject jObject, [CallerLineNumber] int lineno = 0,[CallerMemberName] string membername = null,
+            [CallerFilePath] string filename = null)
+        {
+            string message = null;
+            if (null != jObject) 
+            {
+               message = jObject.ToString(Formatting.None); Console.WriteLine(message);
+            }
+            HttpRequestMessage httpRequest = new HttpRequestMessage(httpMethod, requestUrl);
+            if (null != jObject) httpRequest.Content = new StringContent(message);
+            Task<HttpResponseMessage> httpResponseTask = httpClient.SendAsync(httpRequest);
+            httpResponseTask.Wait();
+            HttpResponseMessage httpResponse = httpResponseTask.Result;
+            Task<string> readResponseTask = httpResponse.Content.ReadAsStringAsync();
+            string response = readResponseTask.Result;
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+#if DEBUG
+                Console.WriteLine($"HTTP Response Unsuccessful in filename {filename}\r\nat member name" +
+                    $" {membername} on line No. {lineno} with httpMethod " + httpMethod.ToString() + ":\r\n" + response);
+#endif
+                return null;
+            }
+            return JObject.Parse(response);
+        }
+        public static JObject SendHttpClientMessage(HttpClient httpClient, string requestUrl, HttpMethod httpMethod,
+            string jObjectstring, [CallerLineNumber] int lineno = 0, [CallerMemberName] string membername = null,
+            [CallerFilePath] string filename = null)
+        {
+            HttpRequestMessage httpRequest = new HttpRequestMessage(httpMethod, requestUrl);
+            if (null != jObjectstring) httpRequest.Content = new StringContent(jObjectstring);
+            Task<HttpResponseMessage> httpResponseTask = httpClient.SendAsync(httpRequest);
+            httpResponseTask.Wait();
+            HttpResponseMessage httpResponse = httpResponseTask.Result;
+            Task<string> readResponseTask = httpResponse.Content.ReadAsStringAsync();
+            string response = readResponseTask.Result;
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+#if DEBUG
+                Console.WriteLine($"HTTP Response Unsuccessful in filename {filename}\r\nat member name" +
+                    $" {membername} on line No. {lineno} with httpMethod " + httpMethod.ToString() + ":\r\n" + response);
+#endif
+                return null;
+            }
+            return JObject.Parse(response);
+        }
+        public static JObject GetFromMovieDatabase(string requestUrl)
+        {
+            using (HttpClient httpClient = new HttpClient())
+            {
+                httpClient.BaseAddress = new Uri(OnlineDatabase.onlinemoviedb_baselink);
+                JObject jObject = OnlineDatabase.SendHttpClientMessage(httpClient, requestUrl,
+                    HttpMethod.Get, (JObject)null);
+                if (jObject.ContainsKey("success"))
+                {
+                    OnlineDatabase.MovieDatabaseError movieDatabaseError = jObject.ToObject<OnlineDatabase.MovieDatabaseError>();
+                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
+                        $"{movieDatabaseError.status_message}");
+                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
+                    return null;
+                }
+                return jObject;
+            }
         }
 
         public const string onlinemoviedb_baselink = "https://api.themoviedb.org/3";

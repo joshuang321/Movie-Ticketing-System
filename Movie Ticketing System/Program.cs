@@ -8,13 +8,35 @@ using Newtonsoft.Json.Linq;
 using System.Threading.Tasks;
 using System.Net.Http;
 
+/*          ------------------------------------------------------------\
+            * Remember to set API_KEY in InitializeApp                  \
+            *                                                           \
+            * List of Functions to implement further and test later on  \
+            * --------------------------------------------------------- \
+            * OfflineDatabaseInterface()
+            * OnlineDatabaseInterface()
+            * GetMovieFromDatabase(testrequestUrl)
+            * CreateLoginSession()
+            * CreateGuestSession()
+            * PromptForMovieTitle()
+            * GetMovieDetails()
+            * GetAlternativeMovieTitle
+            * GetMovieImages()
+            * GteMovieReccomendations()
+            * GetSimilarMovies()
+            * GetMovieReleaseDates()
+            * GetMovieVideos()
+            * GetAccountDetails(test_session_id)
+            * GuestGetRatedMovies(test_guest_session_id)
+*/
+
 namespace Movie_Ticketing_System
 {
     class Program
     {
         static void Main(string[] args)
         {
-            InitializeApp();
+            //InitializeApp();
             /*
             while (true) 
             {
@@ -31,8 +53,17 @@ namespace Movie_Ticketing_System
             }
             */
         }
-
         static void Print(Object obj) { Console.WriteLine(obj); }
+        static void InitializeApp()
+        {
+            OfflineDatabase.MovieData = new(); OfflineDatabase.CinemaData = new(); OfflineDatabase.ScreeningData = new();
+            OfflineDatabase.OrderData = new();
+            LoadMovieData(); LoadCinemaData(); LoadScreeningData();
+            OfflineDatabase.MovieData.ForEach(delegate (Movie movie)
+            {
+                movie.screeningList = OfflineDatabase.ScreeningData.FindAll(x => movie == x.movie);
+            });
+        }
         static void OfflineDatabaseInterface()
         {
             Console.Write("Offline Database System\r\n" +
@@ -112,95 +143,22 @@ namespace Movie_Ticketing_System
             }
             currentSession.ExitSession();
         }
-        static string GetFromMovieDatabase(string requestUri)
-        {
-            using (HttpClient httpClient = new HttpClient())
-            {
-                httpClient.BaseAddress = new Uri(OnlineDatabase.onlinemoviedb_baselink);
-                Task<HttpResponseMessage> getresponseTask = httpClient.GetAsync(requestUri);
-                getresponseTask.Wait();
-                HttpResponseMessage httpResponse = getresponseTask.Result;
-                if (!httpResponse.IsSuccessStatusCode)
-                {
-                    Console.WriteLine("Error occured, please try again.");
-                    return null;
-                }
-                Task<string> readStringTask = httpResponse.Content.ReadAsStringAsync();
-                readStringTask.Wait();
-                JObject jObject = JObject.Parse(readStringTask.Result);
-                if (jObject.ContainsKey("success"))
-                {
-                    OnlineDatabase.MovieDatabaseError movieDatabaseError = JsonConvert.DeserializeObject
-                        <OnlineDatabase.MovieDatabaseError>(readStringTask.Result);
-                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
-                        $"{movieDatabaseError.status_message}");
-                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
-                    return null;
-                }
-                return readStringTask.Result;
-            }
-        }
         static OnlineDatabase.MovieDatabaseSession CreateLoginSession()
         {
-            OnlineDatabase.MovieDatabaseRequestToken request_token = 
-                new OnlineDatabase.MovieDatabaseRequestToken();
-            Console.WriteLine("Enter username: ");
-            string username = Console.ReadLine();
-            Console.WriteLine("Enter password: ");
-            string password = Console.ReadLine();
+            Console.Write("Enter username: ");  string username = Console.ReadLine();
+            Console.Write("Enter password: "); string password = Console.ReadLine();
             using (HttpClient httpClient = new HttpClient())
             {
                 httpClient.BaseAddress = new Uri(OnlineDatabase.onlinemoviedb_baselink);
-                Task<HttpResponseMessage> getresponseTask = httpClient.GetAsync(@"/authentication/token/new?api_key=" +
+                JObject result = OnlineDatabase.GetFromMovieDatabase(@"/authentication/token/new?api_key=" +
                         OnlineDatabase.api_key_session);
-                getresponseTask.Wait();
-                HttpResponseMessage responseMessage = getresponseTask.Result;
-                if (!responseMessage.IsSuccessStatusCode)
-                {
-                    Console.WriteLine("Error occured, please try again,"); return null;
-                }
-                Task<string> readStringTask = responseMessage.Content.ReadAsStringAsync();
-                readStringTask.Wait();
-                JObject jObject = JObject.Parse(readStringTask.Result);
-                if (!(bool)jObject.SelectToken("success"))
-                {
-                    OnlineDatabase.MovieDatabaseError movieDatabaseError = JsonConvert.DeserializeObject
-                        <OnlineDatabase.MovieDatabaseError>(readStringTask.Result);
-                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
-                        $"{movieDatabaseError.status_message}");
-                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
-                    return null;
-                }
-                request_token.expires_at = (string)jObject.SelectToken("expires_at");
-                request_token.request_token = (string)jObject.SelectToken("request_token");
+                OnlineDatabase.MovieDatabaseRequestToken request_token = new OnlineDatabase.MovieDatabaseRequestToken(
+                    (string)result.SelectToken("expires_at"), (string)result.SelectToken("request_token"));
 
-                FormUrlEncodedContent content = new FormUrlEncodedContent(new[]
-                {
-                    new KeyValuePair<string,string>("username", username),
-                    new KeyValuePair<string, string>("password", password),
-                    new KeyValuePair<string, string>("request_token", request_token.request_token)
-                });
-                getresponseTask = httpClient.PostAsync(@"/authentication/token/validate_with_login?api_key=" + OnlineDatabase.api_key_session,
-                    content);
-                getresponseTask.Wait();
-                responseMessage = getresponseTask.Result;
-                if (!responseMessage.IsSuccessStatusCode)
-                {
-                    Console.WriteLine("Error occured, please try again."); return null;
-                }
-                readStringTask = responseMessage.Content.ReadAsStringAsync();
-                readStringTask.Wait();
-                jObject = JObject.Parse(readStringTask.Result);
-                if(!(bool)jObject.SelectToken("success"))
-                {
-                    OnlineDatabase.MovieDatabaseError movieDatabaseError = JsonConvert.DeserializeObject
-                        <OnlineDatabase.MovieDatabaseError>(readStringTask.Result);
-                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
-                        $"{movieDatabaseError.status_message}");
-                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
-                    return null;
-                }
-                return new OnlineDatabase.MovieDatabaseSession((string)jObject.SelectToken("session_id"));
+                result = OnlineDatabase.SendHttpClientMessage(httpClient, @"/authentication/token/validate_with_login?api_key=" +
+                    OnlineDatabase.api_key_session, HttpMethod.Post, @"{username:" + username + ",password:" +
+                    password + ",request_token:" + request_token.request_token + "}");
+                return new OnlineDatabase.MovieDatabaseSession((string)result.SelectToken("session_id"));
             }
         }
         static OnlineDatabase.MovieDatabaseSession CreateGuestSession()
@@ -208,27 +166,10 @@ namespace Movie_Ticketing_System
             using (HttpClient httpClient = new HttpClient())
             {
                 httpClient.BaseAddress = new Uri(OnlineDatabase.api_key_session);
-                Task<HttpResponseMessage> getguestsessionTask = httpClient.GetAsync($"/authentication/guest_session/new?api_key=" +
+                JObject jObject = OnlineDatabase.GetFromMovieDatabase($"/authentication/guest_session/new?api_key=" +
                     OnlineDatabase.api_key_session);
-                getguestsessionTask.Wait();
-                HttpResponseMessage httpResponse = getguestsessionTask.Result;
-                if (!httpResponse.IsSuccessStatusCode)
-                {
-                    Console.WriteLine("Error occured. Please try again.");
-                }
-                Task<string> readStringTask = httpResponse.Content.ReadAsStringAsync();
-                readStringTask.Wait();
-                JObject jObject = JObject.Parse(readStringTask.Result);
-                if (!(bool)jObject.SelectToken("success"))
-                {
-                    OnlineDatabase.MovieDatabaseError movieDatabaseError = JsonConvert.DeserializeObject
-                        <OnlineDatabase.MovieDatabaseError>(readStringTask.Result);
-                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
-                        $"{movieDatabaseError.status_message}");
-                    if (7 == movieDatabaseError.status_code) Console.WriteLine($"Invalid api_key: {OnlineDatabase.api_key_session}");
-                    return null;
-                }
-                return new OnlineDatabase.MovieDatabaseGuestSession((string)jObject.SelectToken("session_id"), (string)jObject.SelectToken("expires_at"));
+                return new OnlineDatabase.MovieDatabaseGuestSession((string)jObject.SelectToken("session_id"),
+                    (string)jObject.SelectToken("expires_at"));
             }
         }
         static int PromptForMovieTitle()
@@ -247,11 +188,12 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"?api_key=" + OnlineDatabase.api_key_session + @"&language=en-US");
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"?api_key=" + 
+                OnlineDatabase.api_key_session + @"&language=en-US");
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseMovieDetails movieDetails = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseMovieDetails>(result);
+                OnlineDatabase.MovieDatabaseMovieDetails movieDetails = result.ToObject<
+                    OnlineDatabase.MovieDatabaseMovieDetails>();
 
                 // do whatever here
             }
@@ -260,11 +202,12 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/alternative_titles" + @"?api_key=" + OnlineDatabase.api_key_session);
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/alternative_titles" + @"?api_key=" +
+                OnlineDatabase.api_key_session);
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseAlternativeTitles movietitles = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseAlternativeTitles>(result);
+                OnlineDatabase.MovieDatabaseAlternativeTitles movietitles = result.ToObject<
+                    OnlineDatabase.MovieDatabaseAlternativeTitles>();
 
                 // do whatever here
             }
@@ -273,12 +216,12 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/images" + @"?api_key=" + OnlineDatabase.api_key_session +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/images" + @"?api_key=" + OnlineDatabase.api_key_session +
                 @"&language=en-US&include_image_language=null");
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseImages movieImages = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseImages>(result);
+                OnlineDatabase.MovieDatabaseImages movieImages = result.ToObject<
+                    OnlineDatabase.MovieDatabaseImages>();
 
                 // do whatever here
             }
@@ -292,12 +235,12 @@ namespace Movie_Ticketing_System
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/recommendations" + @"?api_key=" + OnlineDatabase.api_key_session +
-                @"&language=en-US&page=" + pagenumber);
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/recommendations" + @"?api_key=" + 
+                OnlineDatabase.api_key_session + @"&language=en-US&page=" + pagenumber);
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseReccommendations movieReccomendations = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseReccommendations>(result);
+                OnlineDatabase.MovieDatabaseReccommendations movieReccomendations = result.ToObject<
+                    OnlineDatabase.MovieDatabaseReccommendations>();
                 
                 // do whatever here
             }
@@ -311,12 +254,12 @@ namespace Movie_Ticketing_System
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/similar" + @"?api_key=" + OnlineDatabase.api_key_session +
-                @"&language=en-US&page=" + pagenumber);
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/similar" + @"?api_key=" +
+                OnlineDatabase.api_key_session + @"&language=en-US&page=" + pagenumber);
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseSimilarMovies similarMovies = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseSimilarMovies>(result);
+                OnlineDatabase.MovieDatabaseSimilarMovies similarMovies = result.ToObject<
+                    OnlineDatabase.MovieDatabaseSimilarMovies>();
                 
                 // do whatever here
             }
@@ -325,11 +268,12 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"release_dates?api_key=" + OnlineDatabase.api_key_session);
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"release_dates?api_key=" +
+                OnlineDatabase.api_key_session);
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseReleaseDates movieReleaseDates = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseReleaseDates>(result);
+                OnlineDatabase.MovieDatabaseReleaseDates movieReleaseDates = result.ToObject<
+                    OnlineDatabase.MovieDatabaseReleaseDates>();
 
                 // do whatever here
             }
@@ -338,19 +282,19 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            string result = GetFromMovieDatabase(@"/movie/" + movieid + @"/videos?api_key=" +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/videos?api_key=" +
                 OnlineDatabase.api_key_session + "&language=en-US");
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseVideos movieVideos = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseVideos>(result);
+                OnlineDatabase.MovieDatabaseVideos movieVideos = result.ToObject<
+                    OnlineDatabase.MovieDatabaseVideos>();
 
                 // do whatever here
             }
         }
         static void GetAccountDetails(string session_id)
         {
-            string result = GetFromMovieDatabase(@"/account?api_key=" + OnlineDatabase.api_key_session +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/account?api_key=" + OnlineDatabase.api_key_session +
                 "&session_id=" + session_id);
             if (null != result)
             {
@@ -369,13 +313,13 @@ namespace Movie_Ticketing_System
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            string result = GetFromMovieDatabase(@"/guest_session/" + session_id + "/rated/movies?api_key=" +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/guest_session/" + session_id + "/rated/movies?api_key=" +
                 OnlineDatabase.api_key_session + @"&language=en-US&sort_by=created_at." +
                 (("Y" == inputResponse || "y" == inputResponse) ? "asc" : "desc"));
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseGuestRatedMovies guestRatedMovies = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseGuestRatedMovies>(result);
+                OnlineDatabase.MovieDatabaseGuestRatedMovies guestRatedMovies = result.ToObject<
+                    OnlineDatabase.MovieDatabaseGuestRatedMovies>();
 
                 // do whatever here
             }
@@ -439,16 +383,6 @@ namespace Movie_Ticketing_System
                     OfflineDatabase.ScreeningData.Add(screening);
                 }
             }
-        }
-        static void InitializeApp()
-        {
-            OfflineDatabase.MovieData = new(); OfflineDatabase.CinemaData = new(); OfflineDatabase.ScreeningData = new(); 
-            OfflineDatabase.OrderData = new();
-            LoadMovieData(); LoadCinemaData(); LoadScreeningData();
-            OfflineDatabase.MovieData.ForEach(delegate (Movie movie)
-            {
-                movie.screeningList = OfflineDatabase.ScreeningData.FindAll(x => movie == x.movie);
-            });
         }
         static void ListMovieScreenings()
         {
