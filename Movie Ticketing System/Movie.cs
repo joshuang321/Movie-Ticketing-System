@@ -25,9 +25,17 @@ namespace Movie_Ticketing_System
             title = Title; duration = Duration; classification = Classification;
             openingDate = OpeningDate; genreList = GenreList; 
         }
+        public void AddGenre(string genre)
+        {
+            genreList.Add(genre);
+        }
+        public void AddScreening(Screening screening)
+        {
+            screeningList.Add(screening);
+        }
         public override string ToString()
         {
-            return String.Format("{0, -26}", title) + duration + "\t\t" + classification + "\t\t"
+            return string.Format("{0, -26}", title) + duration + "\t\t" + classification + "\t\t"
                 + openingDate + "\t" + string.Join('/', genreList);
         }
     }

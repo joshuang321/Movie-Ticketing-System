@@ -362,16 +362,16 @@ namespace Movie_Ticketing_System
         }
         static void GuestGetRatedMovies(string session_id)
         {
-            string input;
+            string inputResponse;
             Console.WriteLine("Do you want it to be sorted by ASC? [Y/N]: ");
-            if ((input = Console.ReadLine()).Length != 1  && "y" != input && "Y" != input
-                && "n" != input && "N" != input)
+            if (1 != (inputResponse = Console.ReadLine()).Length  && "y" != inputResponse && "Y" != inputRespone
+                && "n" != inputResponse && "N" != inputResponse)
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
             string result = GetFromMovieDatabase(@"/guest_session/" + session_id + "/rated/movies?api_key=" +
                 OnlineDatabase.api_key_session + @"&language=en-US&sort_by=created_at." +
-                (("Y" == input || "y" == input) ? "asc" : "desc"));
+                (("Y" == inputResponse || "y" == inputResponse) ? "asc" : "desc"));
             if (null != result)
             {
                 OnlineDatabase.MovieDatabaseGuestRatedMovies guestRatedMovies = JsonConvert.DeserializeObject<
@@ -672,7 +672,7 @@ namespace Movie_Ticketing_System
                         }
                         break;
                 }
-                newOrder.ticketList.Add(genericTicket);
+                newOrder.AddTicket(genericTicket);
             }
             Console.Write("Amount payable: {0:C2}\r\nPRESS ANY KEY TO MAKE PAYMENT",
                 newOrder.amount);

@@ -13,11 +13,6 @@ namespace Movie_Ticketing_System
             public string status_message { get; set; }
             public int status_code { get; set; }
         }
-        public struct MovieDatabaseAccount
-        {
-            public string username { get; set; }
-            public string password { get; set; }
-        }
         public struct MovieDatabaseRequestToken
         {
             public string expires_at { get; set; }
@@ -248,6 +243,5 @@ namespace Movie_Ticketing_System
 
         public const string onlinemoviedb_baselink = "https://api.themoviedb.org/3";
         public static string api_key_session = null;
-        public MovieDatabaseAccount session_account;
     }
 }

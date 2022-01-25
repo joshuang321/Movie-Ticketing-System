@@ -23,6 +23,10 @@ namespace Movie_Ticketing_System
             orderNo = OrderNo; orderDateTime = OrderDateTime; amount = 0.0;
             status = null; ticketList = new();
         }
+        public void AddTicket(Ticket ticket)
+        {
+            ticketList.Add(ticket);
+        }
         public override string ToString()
         {
             return base.ToString();
