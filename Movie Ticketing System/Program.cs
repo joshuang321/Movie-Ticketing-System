@@ -364,7 +364,7 @@ namespace Movie_Ticketing_System
         {
             string inputResponse;
             Console.WriteLine("Do you want it to be sorted by ASC? [Y/N]: ");
-            if (1 != (inputResponse = Console.ReadLine()).Length  && "y" != inputResponse && "Y" != inputRespone
+            if (1 != (inputResponse = Console.ReadLine()).Length  && "y" != inputResponse && "Y" != inputResponse
                 && "n" != inputResponse && "N" != inputResponse)
             {
                 Console.WriteLine("Invalid Input!"); return;
