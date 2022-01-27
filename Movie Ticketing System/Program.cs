@@ -5,8 +5,8 @@ using System.Net;
 using System.IO.Compression;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Threading.Tasks;
 using System.Net.Http;
+using System.Diagnostics;
 
 /*          ------------------------------------------------------------\
             * Remember to set API_KEY in InitializeApp                  \
@@ -52,9 +52,12 @@ namespace Movie_Ticketing_System
                 else OnlineDatabaseInterface();
             }
             */
+           
+            InitializeOnlineDatabase();
+            GetMovieDetails();
         }
         static void Print(Object obj) { Console.WriteLine(obj); }
-        static void InitializeApp()
+        static void InitializeOffDatabase()
         {
             OfflineDatabase.MovieData = new(); OfflineDatabase.CinemaData = new(); OfflineDatabase.ScreeningData = new();
             OfflineDatabase.OrderData = new();
@@ -63,6 +66,10 @@ namespace Movie_Ticketing_System
             {
                 movie.screeningList = OfflineDatabase.ScreeningData.FindAll(x => movie == x.movie);
             });
+        }
+        static void InitializeOnlineDatabase()
+        {
+            OnlineDatabase.fileIE = new(); OnlineDatabase.CacheGenres();
         }
         static void OfflineDatabaseInterface()
         {
@@ -150,14 +157,14 @@ namespace Movie_Ticketing_System
             using (HttpClient httpClient = new HttpClient())
             {
                 httpClient.BaseAddress = new Uri(OnlineDatabase.onlinemoviedb_baselink);
-                JObject result = OnlineDatabase.GetFromMovieDatabase(@"/authentication/token/new?api_key=" +
+                JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/authentication/token/new?api_key=" +
                         OnlineDatabase.api_key_session);
                 OnlineDatabase.MovieDatabaseRequestToken request_token = new OnlineDatabase.MovieDatabaseRequestToken(
                     (string)result.SelectToken("expires_at"), (string)result.SelectToken("request_token"));
 
-                result = OnlineDatabase.SendHttpClientMessage(httpClient, @"/authentication/token/validate_with_login?api_key=" +
-                    OnlineDatabase.api_key_session, HttpMethod.Post, @"{username:" + username + ",password:" +
-                    password + ",request_token:" + request_token.request_token + "}");
+                result = OnlineDatabase.SendHttpClientMessage(httpClient, @"3/authentication/token/validate_with_login?api_key=" +
+                    OnlineDatabase.api_key_session, HttpMethod.Post, @"{""username"":" + username + @",""password"":" +
+                    password + @",""request_token"":" + request_token.request_token + "}");
                 return new OnlineDatabase.MovieDatabaseSession((string)result.SelectToken("session_id"));
             }
         }
@@ -166,7 +173,7 @@ namespace Movie_Ticketing_System
             using (HttpClient httpClient = new HttpClient())
             {
                 httpClient.BaseAddress = new Uri(OnlineDatabase.api_key_session);
-                JObject jObject = OnlineDatabase.GetFromMovieDatabase($"/authentication/guest_session/new?api_key=" +
+                JObject jObject = OnlineDatabase.GetFromMovieDatabase($"3/authentication/guest_session/new?api_key=" +
                     OnlineDatabase.api_key_session);
                 return new OnlineDatabase.MovieDatabaseGuestSession((string)jObject.SelectToken("session_id"),
                     (string)jObject.SelectToken("expires_at"));
@@ -177,10 +184,8 @@ namespace Movie_Ticketing_System
             Console.Write("Enter movie to query: ");
             string movietitle = Console.ReadLine();
             int movieid = GetMovieIdsFromMovieDatabaseAPI(movietitle);
-            if (-1 == movieid)
-            {
-                Console.WriteLine($"Failed to find movie: {movietitle}");
-            }
+            if (-1 == movieid) Console.WriteLine($"Failed to find movie: {movietitle}");
+            
             return movieid;
         }
 
@@ -188,35 +193,108 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"?api_key=" + 
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/movie/" + movieid + @"?api_key=" + 
                 OnlineDatabase.api_key_session + @"&language=en-US");
             if (null != result)
             {
                 OnlineDatabase.MovieDatabaseMovieDetails movieDetails = result.ToObject<
                     OnlineDatabase.MovieDatabaseMovieDetails>();
+                if (null != movieDetails)
+                {
+                    if (null !=movieDetails.belongs_to_collection) GetCollectionDetails(movieDetails.belongs_to_collection.id);
+                    using (StreamWriter sw = new StreamWriter("movie_details_" + movieid + ".html", false))
+                    {
+                        sw.Write(OnlineDatabase.htmlbody_start);
+                        sw.Write(@"<h1 class=""h1 text-center"">" + movieDetails.title + @"</h1><div class=""text-center""><img src=""");
+                        sw.Write(OnlineDatabase.imagebase_link + movieDetails.backdrop_path);
+                        sw.Write(@"""></div><dl class=""row h3"">");
 
-                // do whatever here
+                        PrintDescription(sw, "Overview", movieDetails.overview);
+                        PrintDescription(sw, "Genres", string.Join(", ", (object[])movieDetails.genres));
+                        PrintDescription(sw, "Runtime", movieDetails.runtime.ToString() + " Minutes");
+                        PrintDescription(sw, "Status", movieDetails.status);
+                        PrintDescription(sw, "Age Restriction", movieDetails.adult ? "Adult" : "For All Ages");
+                        PrintDescription(sw, "Popularity", movieDetails.popularity.ToString());
+                        PrintDescription(sw, "Vote Average", movieDetails.vote_average.ToString());
+                        PrintDescription(sw, "Vote Count", movieDetails.vote_count.ToString());
+
+                        sw.Write(@"</dt>" + OnlineDatabase.htmlbody_end);
+
+                        sw.Flush();
+                    }
+                    if (null != movieDetails.belongs_to_collection) OnlineDatabase.OpenHTMLonInternetExplorer("movie_details_" + movieid + ".html",
+                        movieDetails.belongs_to_collection + ".html");
+                    else OnlineDatabase.OpenHTMLonInternetExplorer("movie_details_" + movieid + ".html");
+                }
             }
+        }
+        static void GetCollectionDetails(int collection_id)
+        {
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/collection/" + collection_id +
+                "?api_key=" + OnlineDatabase.api_key_session + @"&language=en-US");
+
+            if (null != result)
+            {
+                using (StreamWriter sw = new StreamWriter(collection_id.ToString() + ".html", false))
+                {
+                    sw.Write(OnlineDatabase.htmlbody_start);
+                    sw.Write(OnlineDatabase.carousel_start);
+                    OnlineDatabase.MovieDatabaseCollections movieCollections = result.ToObject<
+                        OnlineDatabase.MovieDatabaseCollections>();
+
+                    sw.Write(OnlineDatabase.carouselfirstslide_start);
+                    sw.Write(@"""" + OnlineDatabase.imagebase_link + movieCollections.backdrop_path + @"""");
+                    sw.Write(OnlineDatabase.carouselfirstslide_end);
+
+                    foreach (OnlineDatabase.MovieDatabaseCollections.Part part in movieCollections.parts)
+                    {
+                        if (null != part.backdrop_path)
+                        {
+                            sw.Write(OnlineDatabase.carouselslide_start);
+                            sw.Write(@"""" + OnlineDatabase.imagebase_link + part.backdrop_path + @"""");
+                            sw.Write(OnlineDatabase.carouselslide_end);
+                        }
+                    }
+                    sw.Write(OnlineDatabase.carousel_end);
+                    sw.Write(OnlineDatabase.htmlbody_end);
+                }
+            }
+        }
+        static void PrintDescription(StreamWriter sw, string dt, string dd)
+        {
+            sw.Write(@"<dt class=""col-sm-3"">");
+            sw.Write(dt);
+            sw.Write(@"</dt><dd class=""col-sm-9"">");
+            sw.Write(dd);
+            sw.Write("</dd>");
         }
         static void GetAlternativeMovieTitles()
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/alternative_titles" + @"?api_key=" +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/movie/" + movieid + @"/alternative_titles" + @"?api_key=" +
                 OnlineDatabase.api_key_session);
             if (null != result)
             {
                 OnlineDatabase.MovieDatabaseAlternativeTitles movietitles = result.ToObject<
                     OnlineDatabase.MovieDatabaseAlternativeTitles>();
-
-                // do whatever here
+                if (0 == movietitles.titles.Length)
+                {
+                    Console.WriteLine("The queried movie has no alternative titles!");
+                    return;
+                }
+                Console.WriteLine("Alternative Titles: ");
+                foreach (OnlineDatabase.MovieDatabaseAlternativeTitles.Title title in movietitles.titles)
+                {
+                    Console.WriteLine(title.title);
+                }
             }
         }
         static void GetMovieImages()
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/images" + @"?api_key=" + OnlineDatabase.api_key_session +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/movie/" + movieid + @"/images" + @"?api_key=" + OnlineDatabase.api_key_session +
                 @"&language=en-US&include_image_language=null");
             if (null != result)
             {
@@ -230,19 +308,49 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            Console.WriteLine("Enter page number to look at (1-1000): ");
+            Console.Write("Enter page number to look at (1-1000): ");
             if (!int.TryParse(Console.ReadLine(), out int pagenumber) || pagenumber < 1 || pagenumber > 1000)
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/recommendations" + @"?api_key=" + 
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/movie/" + movieid + @"/recommendations" + @"?api_key=" + 
                 OnlineDatabase.api_key_session + @"&language=en-US&page=" + pagenumber);
             if (null != result)
             {
                 OnlineDatabase.MovieDatabaseReccommendations movieReccomendations = result.ToObject<
                     OnlineDatabase.MovieDatabaseReccommendations>();
-                
-                // do whatever here
+                if (0 == movieReccomendations.total_results)
+                {
+                    Console.WriteLine("No results found for this movie! Please try another.");
+                    return;
+                }
+                else if (0 == movieReccomendations.results.Length)
+                {
+                    Console.WriteLine("No results for this page. Try page 1 - " + movieReccomendations.total_pages + ".");
+                    return;
+                }
+                using (StreamWriter sw = new StreamWriter("movie_recommendations_" + movieid + ".html", false))
+                {
+                    sw.Write(OnlineDatabase.htmlbody_start);
+                    foreach (OnlineDatabase.Result movieresult in movieReccomendations.results)
+                    {
+                        sw.Write(@"<h1 class=""h1 text-center"">" + movieresult.title + @"</h1><div class=""text-center""><img src=""");
+                        sw.Write(OnlineDatabase.imagebase_link + movieresult.backdrop_path);
+                        sw.Write(@"""></div><dl class=""row h3"">");
+
+                        PrintDescription(sw, "Genres", string.Join(", ", (object[])OnlineDatabase.FindGenresFromId(movieresult.genre_ids)));
+                        PrintDescription(sw, "Age Restriction", movieresult.adult ? "Adult" : "For All Ages");
+                        PrintDescription(sw, "Popularity", movieresult.popularity.ToString());
+                        PrintDescription(sw, "Vote Average", movieresult.vote_average.ToString());
+                        PrintDescription(sw, "Vote Count", movieresult.vote_count.ToString());
+
+                        sw.Write(@"</dt>");
+                        sw.Flush();
+                    }
+                    sw.Write(OnlineDatabase.htmlbody_end);
+                    sw.Flush();
+                }
+                OnlineDatabase.OpenHTMLonInternetExplorer("movie_recommendations_" + movieid + ".html");
             }
         }
         static void GetSimilarMovies()
@@ -254,7 +362,7 @@ namespace Movie_Ticketing_System
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/similar" + @"?api_key=" +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/movie/" + movieid + @"/similar" + @"?api_key=" +
                 OnlineDatabase.api_key_session + @"&language=en-US&page=" + pagenumber);
             if (null != result)
             {
@@ -268,7 +376,7 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"release_dates?api_key=" +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/movie/" + movieid + @"release_dates?api_key=" +
                 OnlineDatabase.api_key_session);
             if (null != result)
             {
@@ -282,7 +390,7 @@ namespace Movie_Ticketing_System
         {
             int movieid = PromptForMovieTitle();
             if (-1 == movieid) return;
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/movie/" + movieid + @"/videos?api_key=" +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/movie/" + movieid + @"/videos?api_key=" +
                 OnlineDatabase.api_key_session + "&language=en-US");
             if (null != result)
             {
@@ -294,12 +402,12 @@ namespace Movie_Ticketing_System
         }
         static void GetAccountDetails(string session_id)
         {
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/account?api_key=" + OnlineDatabase.api_key_session +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/account?api_key=" + OnlineDatabase.api_key_session +
                 "&session_id=" + session_id);
             if (null != result)
             {
-                OnlineDatabase.MovieDatabaseAccountDetails accountDetails = JsonConvert.DeserializeObject<
-                    OnlineDatabase.MovieDatabaseAccountDetails>(result);
+                OnlineDatabase.MovieDatabaseAccountDetails accountDetails = result.ToObject<
+                    OnlineDatabase.MovieDatabaseAccountDetails>();
 
                 // do whatever here
             }
@@ -313,7 +421,7 @@ namespace Movie_Ticketing_System
             {
                 Console.WriteLine("Invalid Input!"); return;
             }
-            JObject result = OnlineDatabase.GetFromMovieDatabase(@"/guest_session/" + session_id + "/rated/movies?api_key=" +
+            JObject result = OnlineDatabase.GetFromMovieDatabase(@"3/guest_session/" + session_id + "/rated/movies?api_key=" +
                 OnlineDatabase.api_key_session + @"&language=en-US&sort_by=created_at." +
                 (("Y" == inputResponse || "y" == inputResponse) ? "asc" : "desc"));
             if (null != result)
