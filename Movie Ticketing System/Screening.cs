@@ -1,12 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿//============================================================
+// Student Number : S10205140B
+// Student Name : Joshua Ng
+// Module Group : T04
+//============================================================
+
+using System;
 
 namespace Movie_Ticketing_System
 {
-    class Screening
+    class Screening : IComparable<Screening>
     {
         public int screeningNo { get; set; }
         public DateTime screeningDateTime { get; set; }
@@ -24,6 +26,10 @@ namespace Movie_Ticketing_System
         {
             screeningNo = ScreeningNo; screeningDateTime = ScreeningDateTime; screeningType = ScreeningType;
             cinema = Cinema; movie = Movie;
+        }
+        public int CompareTo(Screening screening)
+        {
+            return seatsRemaining.CompareTo(screening.seatsRemaining);
         }
         public override string ToString()
         {

@@ -1,20 +1,34 @@
-﻿using System;
+﻿//============================================================
+// Student Number : S10205140B
+// Student Name : Joshua Ng
+// Module Group : T04
+//============================================================
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Net.Http;
+using System.IO.Compression;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.IO;
-
+using System.Net;
+using System.Text;
 
 namespace Movie_Ticketing_System
 {
     class OnlineDatabase
     {
+        public class MovieDatabaseObject
+        {
+            public bool adult { get; set; }
+            public int id { get; set; }
+            public string original_title { get; set; }
+            public float popularity { get; set; }
+            public bool video { get; set; }
+        }
         public class MovieDatabaseError
         {
             public string status_message { get; set; }
@@ -52,20 +66,8 @@ namespace Movie_Ticketing_System
             }
             public void ExitSession()
             {
-                using (HttpClient httpClient = new HttpClient())
-                {
-                    httpClient.BaseAddress = new Uri(onlinemoviedb_baselink);
-                    HttpRequestMessage httpDeleteRequest = new HttpRequestMessage(HttpMethod.Delete,
-                        @"/authentication/session?api_key=" + api_key_session);
-                    httpDeleteRequest.Content = new StringContent(JsonConvert.SerializeObject(new MovieDatabaseDeleteRequestBody(session_id)));
-                    Task<HttpResponseMessage> deleteSessionTask = httpClient.SendAsync(httpDeleteRequest);
-                    deleteSessionTask.Wait();
-                    HttpResponseMessage httpResponse = deleteSessionTask.Result;
-                    if (!httpResponse.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine("Error occured. Failed to exit session."); return;
-                    }
-                }
+                SendHttpClientMessage(httpClientSession, @"3/authentication/session?api_key=" + api_key_session,
+                    HttpMethod.Delete, JObject.FromObject(new MovieDatabaseDeleteRequestBody(session_id)));
             }
         }
         public class MovieDatabaseGuestSession : MovieDatabaseSession
@@ -89,7 +91,7 @@ namespace Movie_Ticketing_System
         }
         public class MovieDatabaseGenre
         {
-            public Genre[] genres;
+            public Genre[] genres { get; set; }
         }
         public class MovieDatabaseCollections
         {
@@ -169,6 +171,11 @@ namespace Movie_Ticketing_System
                 public string iso_3166_1 { get; set; }
                 public string title { get; set; }
                 public string type { get; set; }
+
+                public override string ToString()
+                {
+                    return title;
+                }
             }
 
             public int id { get; set; }
@@ -185,6 +192,11 @@ namespace Movie_Ticketing_System
                 public int vote_average { get; set; }
                 public int vote_count { get; set; }
                 public int width { get; set; }
+
+                public override string ToString()
+                {
+                    return file_path;
+                }
             }
             public class Poster
             {
@@ -195,6 +207,11 @@ namespace Movie_Ticketing_System
                 public int vote_average { get; set; }
                 public int vote_count { get; set; }
                 public int width { get; set; }
+
+                public override string ToString()
+                {
+                    return file_path;
+                }
             }
 
             public int id { get; set; }
@@ -219,13 +236,6 @@ namespace Movie_Ticketing_System
             public float vote_average { get; set; }
         }
         public class MovieDatabaseReccommendations
-        {
-            public int page { get; set; }
-            public Result[] results { get; set; }
-            public int total_pages { get; set; }
-            public int total_results { get; set; }
-        }
-        public class MovieDatabaseSimilarMovies
         {
             public int page { get; set; }
             public Result[] results { get; set; }
@@ -275,9 +285,14 @@ namespace Movie_Ticketing_System
             {
                 public string hash { get; set; }
             }
+            public class TMDB
+            {
+                public string avatar_path { get; set; }
+            }
             public class Avatar
             {
                 public Gravatar gravatar { get; set; }
+                public TMDB tmdb { get; set; }
             }
 
             public Avatar avatar { get; set; }
@@ -293,7 +308,7 @@ namespace Movie_Ticketing_System
             public class Result
             {
                 public bool adult { get; set; }
-                public string backdropPath { get; set; }
+                public string backdrop_path { get; set; }
                 public int[] genre_ids { get; set; }
                 public string original_language { get; set; }
                 public string original_title { get; set; }
@@ -312,6 +327,17 @@ namespace Movie_Ticketing_System
             public MovieDatabaseGuestRatedMovies.Result[] results { get; set; }
             public int total_pages { get; set; }
             public int total_results { get; set; }
+        }
+        public class MovieDatabaseAccountLogin
+        {
+            public string username { get; set; }
+            public string password { get; set; }
+            public string request_token { get; set; }
+
+            public MovieDatabaseAccountLogin(string Username, string Password, string Request_token)
+            {
+                username = Username; password = Password; request_token = Request_token;
+            }
         }
         public class FileInternetExplorer
         {
@@ -334,16 +360,19 @@ namespace Movie_Ticketing_System
             }
         }
         public static JObject SendHttpClientMessage(HttpClient httpClient, string requestUrl, HttpMethod httpMethod,
-            JObject jObject, [CallerLineNumber] int lineno = 0,[CallerMemberName] string membername = null,
+            JObject jObject, [CallerLineNumber] int lineno = 0, [CallerMemberName] string membername = null,
             [CallerFilePath] string filename = null)
         {
             string message = null;
-            if (null != jObject) 
+            if (null != jObject)
             {
-               message = jObject.ToString(Formatting.None); Console.WriteLine(message);
+                message = jObject.ToString(Formatting.None);
+#if DEBUG
+                Console.WriteLine(message);
+#endif
             }
             HttpRequestMessage httpRequest = new HttpRequestMessage(httpMethod, requestUrl);
-            if (null != jObject) httpRequest.Content = new StringContent(message);
+            if (null != jObject) httpRequest.Content = new StringContent(message, Encoding.UTF8, "application/json");
             Task<HttpResponseMessage> httpResponseTask = httpClient.SendAsync(httpRequest);
             httpResponseTask.Wait();
             HttpResponseMessage httpResponse = httpResponseTask.Result;
@@ -366,8 +395,11 @@ namespace Movie_Ticketing_System
             string jObjectstring, [CallerLineNumber] int lineno = 0, [CallerMemberName] string membername = null,
             [CallerFilePath] string filename = null)
         {
+#if DEBUG
+            Console.WriteLine("jObjectstring: " + jObjectstring);
+#endif
             HttpRequestMessage httpRequest = new HttpRequestMessage(httpMethod, requestUrl);
-            if (null != jObjectstring) httpRequest.Content = new StringContent(jObjectstring);
+            if (null != jObjectstring) httpRequest.Content = new StringContent(jObjectstring, Encoding.UTF8, "application/json");
             Task<HttpResponseMessage> httpResponseTask = httpClient.SendAsync(httpRequest);
             httpResponseTask.Wait();
             HttpResponseMessage httpResponse = httpResponseTask.Result;
@@ -388,35 +420,14 @@ namespace Movie_Ticketing_System
         }
         public static JObject GetFromMovieDatabase(string requestUrl)
         {
-            using (HttpClient httpClient = new HttpClient())
+            JObject jObject = SendHttpClientMessage(httpClientSession, requestUrl, HttpMethod.Get, (JObject)null);
+            if (null != jObject && jObject.ContainsKey("success") && true != (bool)jObject.SelectToken("success"))
             {
-                httpClient.BaseAddress = new Uri(onlinemoviedb_baselink);
-                JObject jObject = SendHttpClientMessage(httpClient, requestUrl, HttpMethod.Get, (JObject)null);
-                if (null != jObject && jObject.ContainsKey("success"))
-                {
-                    MovieDatabaseError movieDatabaseError = jObject.ToObject<MovieDatabaseError>();
-                    Console.WriteLine($"movieDatabase Error occured. Status code: ${movieDatabaseError.status_code}\r\n" +
-                        $"{movieDatabaseError.status_message}");
-                }
-                return jObject;
+                MovieDatabaseError movieDatabaseError = jObject.ToObject<MovieDatabaseError>();
+                Console.WriteLine($"movieDatabase Error occured. Status code: {movieDatabaseError.status_code}\r\n" +
+                $"{movieDatabaseError.status_message}");
             }
-        }
-#if DEBUG
-        public static MovieDatabaseSession CreateTestSession()
-        {
-            using (HttpClient httpClient = new HttpClient())
-            {
-                httpClient.BaseAddress = new Uri(onlinemoviedb_baselink);
-                JObject result = GetFromMovieDatabase(@"3/authentication/token/new?api_key=" + api_key_session);
-                if (null == result) return null;
-                MovieDatabaseRequestToken request_token = new MovieDatabaseRequestToken(
-                    (string)result.SelectToken("expires_at"), (string)result.SelectToken("request_token"));
-
-                result = SendHttpClientMessage(httpClient, @"3/authentication/token/validate_with_login?api_key=" +
-                    api_key_session, HttpMethod.Post, @"{""username"":" + test_username + @",""password"":" +
-                    test_password + @",""request_token"":" + request_token.request_token + "}");
-                return new MovieDatabaseSession((string)result.SelectToken("session_id"));
-            }
+            return jObject;
         }
         public static void CacheGenres()
         {
@@ -431,8 +442,6 @@ namespace Movie_Ticketing_System
                 genres = result.ToObject<MovieDatabaseGenre>().genres;
             }
         }
-        public static string test_username { get; set; } public static string test_password { get; set; }
-#endif
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string FindGenreFromId(int genreid)
         {
@@ -441,7 +450,7 @@ namespace Movie_Ticketing_System
         public static string[] FindGenresFromId(int[] genreids)
         {
             string[] genres = new string[genreids.Length];
-            for (int i=0; i<genreids.Length; i++)
+            for (int i = 0; i < genreids.Length; i++)
             {
                 genres[i] = FindGenreFromId(genreids[i]);
             }
@@ -452,8 +461,8 @@ namespace Movie_Ticketing_System
             string response = null;
             Process internetexplorer = new Process();
             Console.Write(@"Opening the Movie Details on Internet Explorer... Do you still want to continue will the the details are shown? [Y\N]: ");
-            if (1 != (response = Console.ReadLine()).Length && "Y" != response && "y" != response
-                && "N" != response && "n" != response)
+            if (1 != (response = Console.ReadLine()).Length || ("Y" != response && "y" != response
+                && "N" != response && "n" != response))
             {
                 Console.WriteLine("Invalid Input!"); File.Delete(main_filename);
                 Array.ForEach<string>(other_filenames, x => File.Delete(x));
@@ -480,9 +489,86 @@ namespace Movie_Ticketing_System
             fileIE[i].DestroyProcessAssociatedFiles();
             fileIE.RemoveAt(i);
         }
+        public static void GetMovieListDetailsFromMDAPI()
+        {
+            movielistdetails_filename = "movie_ids_" + DateTime.Now.AddDays(-1).ToString("MM_dd_yyyy") + ".json";
+            string temp_filename = movielistdetails_filename;
+            string downloadlink = "http://files.tmdb.org/p/exports/" + temp_filename + ".gz";
+
+            if (!File.Exists(temp_filename))
+            {
+                using (WebClient wc = new WebClient())
+                {
+                    temp_filename += ".gz";
+                    wc.DownloadFile(downloadlink, temp_filename);
+                    using (FileStream ofs = new FileStream(temp_filename, FileMode.Open))
+                    {
+                        temp_filename = temp_filename.Remove(temp_filename.Length - 3);
+                        using (FileStream decompfs = File.Create(temp_filename))
+                        {
+                            using (GZipStream decompStream = new GZipStream(ofs, CompressionMode.Decompress))
+                            {
+                                decompStream.CopyTo(decompfs);
+                            }
+                        }
+                    }
+                    File.Delete(temp_filename + ".gz");
+                }
+            }
+        }
+        public static int GetMovieIdFromMovieTitle(string movietitle)
+        {
+            MovieDatabaseObject MovieDatabaseObj = null;
+            using (StreamReader sr = new StreamReader(movielistdetails_filename))
+            {
+                string stringl;
+                while (null != (stringl = sr.ReadLine()))
+                {
+                    MovieDatabaseObj = JsonConvert.DeserializeObject<MovieDatabaseObject>(stringl);
+                    if (movietitle == MovieDatabaseObj.original_title) break;
+                    MovieDatabaseObj = null;
+                }
+            }
+            if (null != MovieDatabaseObj) return MovieDatabaseObj.id;
+            return -1;
+        }
+        public static string GetValidatedSession(string request_token)
+        {
+            JObject result = SendHttpClientMessage(httpClientSession, @"3/authentication/session/new?api_key=" + api_key_session,
+                HttpMethod.Post, @"{""request_token"":""" + request_token + @"""}");
+            if (!(bool)result.SelectToken("success"))
+            {
+                MovieDatabaseError movieDatabaseError = result.ToObject<MovieDatabaseError>();
+                Console.WriteLine($"movieDatabase Error occured. Status code: {movieDatabaseError.status_code}\r\n" +
+                $"{movieDatabaseError.status_message}");
+            }
+            return (string)result.SelectToken("session_id");
+        }
+#if DEBUG
+        public static MovieDatabaseSession CreateTestSession()
+        {
+            using (HttpClient httpClient = new HttpClient())
+            {
+                httpClient.BaseAddress = new Uri(onlinemoviedb_baselink);
+                JObject result = GetFromMovieDatabase(@"3/authentication/token/new?api_key=" + api_key_session);
+                if (null == result) return null;
+                MovieDatabaseRequestToken request_token = new MovieDatabaseRequestToken(
+                    (string)result.SelectToken("expires_at"), (string)result.SelectToken("request_token"));
+                MovieDatabaseAccountLogin accountLogin = new MovieDatabaseAccountLogin(
+                    test_username, test_password, request_token.request_token);
+
+                result = SendHttpClientMessage(httpClient, @"3/authentication/token/validate_with_login?api_key=" +
+                    api_key_session, HttpMethod.Post, JObject.FromObject(accountLogin));
+                if (null == result) return null;
+                return new MovieDatabaseSession(GetValidatedSession((string)result.SelectToken("request_token")));
+            }
+        }
+        public static string test_username { get; set; } public static string test_password { get; set; }
+#endif
 
         public const string onlinemoviedb_baselink = "https://api.themoviedb.org/";
         public static string api_key_session { get; set; }
+        public const string default_gravatar_hash = "ea5c5a5805e6ea740f35969dee4fe442";
 
         public const string htmlbody_start = @"<!DOCTYPE html><html><head><meta charset=""utf-8""><meta name=""viewport"" content = ""width=device-width, initial-scale=1.0""><link rel=""stylesheet"" href=""https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"" integrity=""sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm"" crossorigin=""anonymous""></head><body>";
         public const string htmlbody_end = @"<script src=""https://code.jquery.com/jquery-3.6.0.js"" integrity=""sha256-H+K7U5CnXl1h5ywQfKtSj8PCmoN9aaq30gDh27Xc0jk="" crossorigin=""anonymous""></script><script src=""https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js""" +
@@ -494,9 +580,14 @@ namespace Movie_Ticketing_System
         public const string carouselslide_end = @"></div>";
         public const string carousel_end = @"</div><a class=""carousel-control-prev"" href=""#carouselExampleIndicators"" role=""button"" data-slide=""prev""><span class=""carousel-control-prev-icon"" aria-hidden=""true""></span><span class=""sr-only"">" +
             @"Previous</span></a><a class=""carousel-control-next"" href=""#carouselExampleIndicators"" role=""button"" data-slide=""next""><span class=""carousel-control-next-icon"" aria-hidden=""true""></span><span class=""sr-only"">Next</span></a></div>";
-        public const string imagebase_link = @"https://image.tmdb.org/t/p/w500";
+        public const string tmdb_imagebase_link = @"https://image.tmdb.org/t/p/w500";
+        public const string gravatar_imagebase_link = @"https://www.gravatar.com/avatar/";
+        public const string youtube_embed_start = @"<div class=""embed-responsive embed-responsive-16by9""><iframe class=""embed-responsive-item"" src=""https://www.youtube.com/embed/";
+        public const string youtube_embed_end = @"?rel=0"" allowfullscreen></iframe></div>";
 
-        public static Genre[] genres { get; set; };
+        public static Genre[] genres { get; set; }
         public static List<FileInternetExplorer> fileIE { get; set; }
+        public static string movielistdetails_filename { get; set; }
+        public static HttpClient httpClientSession { get; set; }
     }
 }

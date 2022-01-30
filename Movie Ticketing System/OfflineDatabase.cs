@@ -1,8 +1,11 @@
-﻿using System;
+﻿//============================================================
+// Student Number : S10205140B
+// Student Name : Joshua Ng
+// Module Group : T04
+//============================================================
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Movie_Ticketing_System
 {
@@ -15,5 +18,19 @@ namespace Movie_Ticketing_System
         public static List<Cinema> CinemaData;
         public static List<Screening> ScreeningData;
         public static List<Order> OrderData;
+
+        public class NumMovies : IComparable<NumMovies>
+        {
+            public Movie movie { get; set; }
+            public int num { get; set; }
+            public NumMovies(Movie Movie, int Num)
+            {
+                movie = Movie; num = Num;
+            }
+            public int CompareTo(NumMovies numMovies)
+            {
+                return num.CompareTo(numMovies.num);
+            }
+        }
     }
 }

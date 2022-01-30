@@ -1,8 +1,11 @@
-﻿using System;
+﻿//============================================================
+// Student Number : S10205140B
+// Student Name : Joshua Ng
+// Module Group : T04
+//============================================================
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Movie_Ticketing_System
 {
@@ -23,7 +26,7 @@ namespace Movie_Ticketing_System
             List<string> GenreList)
         {
             title = Title; duration = Duration; classification = Classification;
-            openingDate = OpeningDate; genreList = GenreList; 
+            openingDate = OpeningDate; genreList = GenreList;
         }
         public void AddGenre(string genre)
         {
