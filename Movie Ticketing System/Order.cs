@@ -34,7 +34,7 @@ namespace Movie_Ticketing_System
         }
         public override string ToString()
         {
-            return base.ToString();
+            return orderNo + "\t" + orderDateTime + "\t" + string.Format("{0:C2}", amount) + "\t\t" + status;
         }
     }
 }

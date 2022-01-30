@@ -664,24 +664,33 @@ namespace Movie_Ticketing_System
             }
             OfflineDatabase.ScreeningData[screeningindex].movie.screeningList.Remove(OfflineDatabase.ScreeningData[screeningindex]);
             OfflineDatabase.ScreeningData.RemoveAt(screeningindex);
-            Console.WriteLine("\x1b[1m\x1b[32mMovie Screening removal successful![0m");
+            Console.WriteLine("\x1b[1m\x1b[32mMovie Screening removal successful!\x1b[0m");
         }
         static void OrderMovieTicket()
         {
+            Console.WriteLine("\x1b[1m\x1b[104mTitle\t\t\tDuration\tClassification\tOpeningDate\t\tGenres\x1b[0m");
             OfflineDatabase.MovieData.ForEach(Console.WriteLine);
             Console.Write("\r\nSelect a Movie: ");
-            if (!ValidateOptionInput(OfflineDatabase.MovieData.Count, out int index)) return;
-            List<Screening> filteredscreening = OfflineDatabase.ScreeningData.FindAll(x => OfflineDatabase.MovieData[index - 1] == x.movie);
+            string movietitle = Console.ReadLine();
+            Movie movieSearch = OfflineDatabase.MovieData.Find(x => movietitle == x.title);
+            List<Screening> filteredscreening = OfflineDatabase.ScreeningData.FindAll(x => movieSearch == x.movie);
             filteredscreening.ForEach(Console.WriteLine);
-            Console.Write("\r\nSelect Movie Screening: ");
-            if (!ValidateOptionInput(OfflineDatabase.MovieData.Count, out index)) return;
-            Screening chosenscreening = filteredscreening[index - 1];
+            Console.Write("\r\nSelect Session (session ID): ");
+            if (!int.TryParse(Console.ReadLine(), out int index) || index > OfflineDatabase.gScreeningNo)
+            {
+                Console.WriteLine("\x1b[0m\x1b[31mInvalid Option!\x1b[0m"); return;
+            }
+            Screening chosenscreening = filteredscreening.Find(x=> index == x.screeningNo);
+            if (null == chosenscreening)
+            {
+                Console.WriteLine("\x1b[1m\x1b[31mScreening doesn't exist!\x1b[0m"); return;
+            }
             Console.Write("Number of Tickets to order: ");
             if (!int.TryParse(Console.ReadLine(), out index) || index < 0)
             {
                 Console.WriteLine("\x1b[0m\x1b[31mInvalid Option!\x1b[0m"); return;
             }
-            if (index < chosenscreening.seatsRemaining)
+            if (index > chosenscreening.seatsRemaining)
             {
                 Console.WriteLine("\x1b[0m\x1b[31mNot enough seats of the chosen session!\x1b[0m");
                 return;
@@ -737,7 +746,7 @@ namespace Movie_Ticketing_System
                 }
                 newOrder.AddTicket(genericTicket);
             }
-            Console.Write("Amount payable: {0:C2}\r\nPRESS ANY KEY TO MAKE PAYMENT",
+            Console.WriteLine("Amount payable: {0:C2}\r\nPRESS ANY KEY TO MAKE PAYMENT",
                 newOrder.amount);
             Console.ReadKey();
             chosenscreening.seatsRemaining -= index;
@@ -746,21 +755,26 @@ namespace Movie_Ticketing_System
         }
         static void CancelTicketOrder()
         {
-            Console.Write("Please state order number to be cancel: ");
+            Console.WriteLine("OrderNo\tOrder Date\t\tOrder Price\tOrder Status");
+            OfflineDatabase.OrderData.ForEach(Console.WriteLine);
+            Console.Write("\r\nPlease state order number to be cancel: ");
             if (!int.TryParse(Console.ReadLine(), out int ordernumber))
             {
-                Console.WriteLine("Invalid Input!"); return;
+                Console.WriteLine("\x1b[0m\x1b[31mInvalid Option!\x1b[0m"); return;
             }
             Order ordersearch = OfflineDatabase.OrderData.Find(x => ordernumber == x.orderNo);
             if (null == ordersearch)
             {
-                Console.WriteLine("Failed to find Order of Order No." + ordernumber +
-                    "\r\nOrder Cancellation Unsuccessful!");
+                Console.WriteLine("Failed to find Order of Order No." + ordernumber + "\r\n\x1b[0m\x1b[31mOrder Cancellation Unsuccessful!\x1b[0m");
                 return;
+            }
+            if ("Paid" != ordersearch.status)
+            {
+                Console.WriteLine("\x1b[0m\x1b[31mCannot cancel a unpaid or cancelled Order!\x1b[0m"); return;
             }
             ordersearch.ticketList[0].screening.seatsRemaining += ordersearch.ticketList.Count;
             ordersearch.status = "Cancelled";
-            Console.WriteLine("Amount refunded: {0:C2}\r\nCancellation Successful!", ordersearch.amount);
+            Console.WriteLine("\x1b[1m\x1b[32mAmount refunded: {0:C2}\r\nCancellation Successful!\x1b[0m", ordersearch.amount);
         }
         static void ReccommendMovies()
         {
